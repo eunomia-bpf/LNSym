@@ -3,10 +3,10 @@ Copyright (c) 2023 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Author(s): Yan Peng
 -/
--- LDUR, STUR (SIMD&FP)
+-- LDUR/STUR and signed LDUR, GPR and SIMD&FP
 
 import Arm.Decode
-import Arm.Insts.Common
+import Arm.Insts.LDST.Reg_imm
 
 ----------------------------------------------------------------------
 
@@ -47,6 +47,10 @@ def exec_reg_unscaled_imm
   if inst.VR = 0b1#1 then
     exec_ldstur inst s
   else
-    write_err (StateError.Unimplemented s!"Unsupported instruction {inst} encountered!") s
+    let decoded : Reg_imm_cls :=
+      { size := inst.size, opc := inst.opc, Rn := inst.Rn, Rt := inst.Rt,
+        SIMD? := false, wback := false, postindex := false,
+        imm := Sum.inr inst.imm9 }
+    exec_reg_imm_common decoded s!"{inst}" s
 
 end LDST

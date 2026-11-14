@@ -84,6 +84,10 @@ def exec_inst (ai : ArmInst) (s : ArmState) : ArmState :=
   | DPSFP (DataProcSFPInst.Conversion_between_FP_and_Int i) =>
     DPSFP.exec_conversion_between_FP_and_Int i s
 
+  | LDST (LDSTInst.Reg_imm_pre_indexed i) =>
+    LDST.exec_reg_imm_pre_indexed i s
+  | LDST (LDSTInst.Reg_register_offset i) =>
+    LDST.exec_reg_register_offset i s
   | LDST (LDSTInst.Reg_imm_post_indexed i) =>
     LDST.exec_reg_imm_post_indexed i s
   | LDST (LDSTInst.Reg_unsigned_imm i) =>

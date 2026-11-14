@@ -224,6 +224,10 @@ def decode_ldst_inst (i : BitVec 32) : Option ArmInst :=
   open ArmInst in
   open LDSTInst in
   match_bv i with
+  | [size:2, 111, V:1, 00, opc:2, 0, imm9:9, 11, Rn:5, Rt:5] =>
+    LDST (Reg_imm_pre_indexed {size, V, opc, imm9, Rn, Rt})
+  | [size:2, 111, V:1, 00, opc:2, 1, Rm:5, option:3, S:1, 10, Rn:5, Rt:5] =>
+    LDST (Reg_register_offset {size, V, opc, Rm, option, S, Rn, Rt})
   | [size:2, 111, V:1, 00, opc:2, 0, imm9:9, 01, Rn:5, Rt:5] =>
     LDST (Reg_imm_post_indexed {size, V, opc, imm9, Rn, Rt})
   | [size:2, 111, V:1, 01, opc:2, imm12:12, Rn:5, Rt:5] =>
@@ -253,6 +257,11 @@ def LDST.multiple_struct_rpt_selem (opcode : BitVec 4) : Nat × Nat :=
     | 0b1000#4 => (1, 2) -- LD/ST2: 2 registers
     | _        => (2, 1) -- LD/ST1: 2 registers (opcode: 0b1010#4)
 
+/-- Scalar sign-extending loads have opc=10/11; SIMD still uses opc[0]. -/
+@[state_simp_rules]
+def LDST.regIsLoad (SIMD? : Bool) (opc : BitVec 2) : Bool :=
+  if SIMD? then getLsbD opc 0 else opc != 0#2
+
 /--
 Return the indices of all the GPR/SFP registers that may be modified by the LDST
 instruction `i`: the data register(s) of a load, and the base register `Rn` of
@@ -272,17 +281,17 @@ def LDST.mayModifiedRegs (i : BitVec 32) : Except Format (List RegType) :=
       let (rpt, selem) := LDST.multiple_struct_rpt_selem opcode
       (List.range (rpt * selem)).map fun k => .SFP (Rt + BitVec.ofNat 5 k)
     match arm_inst with
-    | LDST (Reg_imm_post_indexed x) =>
+    | LDST (Reg_imm_pre_indexed x) | LDST (Reg_imm_post_indexed x) =>
       -- Writeback: `x.Rn` is updated for both loads and stores.
-      if getLsbD x.opc 0 then .ok [dataReg x.V x.Rt, .GPR x.Rn] -- Load
+      if regIsLoad (x.V == 1#1) x.opc then .ok [dataReg x.V x.Rt, .GPR x.Rn] -- Load
       else .ok [.GPR x.Rn] -- Store
-    | LDST (Reg_unsigned_imm x) =>
+    | LDST (Reg_unsigned_imm x) | LDST (Reg_register_offset x) =>
       -- No writeback.
-      if getLsbD x.opc 0 then .ok [dataReg x.V x.Rt] -- Load
+      if regIsLoad (x.V == 1#1) x.opc then .ok [dataReg x.V x.Rt] -- Load
       else .ok [] -- Store
     | LDST (Reg_unscaled_imm x) =>
       -- No writeback.
-      if getLsbD x.opc 0 then .ok [dataReg x.VR x.Rt] -- Load
+      if regIsLoad (x.VR == 1#1) x.opc then .ok [dataReg x.VR x.Rt] -- Load
       else .ok [] -- Store
     | LDST (Reg_pair_pre_indexed x) | LDST (Reg_pair_post_indexed x) =>
       -- Writeback: `x.Rn` is updated for both loads and stores.

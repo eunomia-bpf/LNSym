@@ -28,3 +28,4 @@ import «Tests».SMovUMovTest
 import Tests.ConditionalSelectTest
 import Tests.MultiplyDivideTest
 import Tests.ExtractCompareTest
+import Tests.SingleRegMemoryTest
