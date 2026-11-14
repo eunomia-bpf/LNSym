@@ -36,6 +36,8 @@ def exec_inst (ai : ArmInst) (s : ArmState) : ArmState :=
 
   | DPR (DataProcRegInst.Add_sub_carry i) =>
     DPR.exec_add_sub_carry i s
+  | DPR (DataProcRegInst.Add_sub_extended_reg i) =>
+    DPR.exec_add_sub_extended_reg i s
   | DPR (DataProcRegInst.Add_sub_shifted_reg i) =>
     DPR.exec_add_sub_shifted_reg i s
   | DPR (DataProcRegInst.Conditional_compare i) =>

@@ -118,6 +118,8 @@ def decode_data_proc_reg (i : BitVec 32) : Option ArmInst :=
     DPR (Add_sub_carry {sf, op, S, Rm, Rn, Rd})
   | [sf:1, op:1, S:1, 01011, shift:2, 0, Rm:5, imm6:6 , Rn:5, Rd:5] =>
     DPR (Add_sub_shifted_reg {sf, op, S, shift, Rm, imm6, Rn, Rd})
+  | [sf:1, op:1, S:1, 01011001, Rm:5, option:3, imm3:3, Rn:5, Rd:5] =>
+    DPR (Add_sub_extended_reg {sf, op, S, Rm, option, imm3, Rn, Rd})
   | [sf:1, op:1, 1, 11010010, operand:5, cond:4, immediate:1, 0, Rn:5, 0, nzcv:4] =>
     DPR (Conditional_compare {sf, op, operand, cond, immediate, Rn, nzcv})
   | [sf:1, op:1, S:1, 11010100, Rm:5, cond:4, op2:2, Rn:5, Rd:5] =>
@@ -139,6 +141,8 @@ DPR instruction `i`.
 def DPR.MayModifyRegs (i : BitVec 32) : Except Format (List RegType) :=
   match decode_data_proc_reg i with
   | some (.DPR (.Conditional_compare _)) => .ok [] -- Only NZCV changes.
+  | some (.DPR (.Add_sub_extended_reg i)) =>
+    if i.S = 1#1 && i.Rd = 31#5 then .ok [] else .ok [.GPR i.Rd]
   | some _ => .ok [(.GPR (extractLsb' 0 5 i))]
   | none => .error
       f!"Instruction 0x{i.toHex} is not of class Data Processing (Register)."
