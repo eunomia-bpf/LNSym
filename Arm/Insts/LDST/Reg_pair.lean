@@ -101,8 +101,7 @@ def exec_reg_pair_common (inst : Reg_pair_cls) (inst_str : String) (s : ArmState
       simp_all! only [gt_iff_lt, Nat.shiftLeft_eq, Nat.dvd_mul_right, datasize]
     -- State Updates
     let s' := reg_pair_operation inst inst_str signed datasize offset s H1
-    let s' := write_pc ((read_pc s) + 4#64) s'
-    s'
+    if read_err s' = .None then write_pc (read_pc s + 4#64) s' else s'
 
 @[state_simp_rules]
 def exec_reg_pair_pre_indexed
