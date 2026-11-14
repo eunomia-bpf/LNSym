@@ -23,6 +23,21 @@ deriving DecidableEq, Repr
 
 instance : ToString Compare_branch_cls where toString a := toString (repr a)
 
+/-- TBZ/TBNZ: b5 selects both width and the high bit of the bit index. -/
+structure Test_branch_cls where
+  b5 : BitVec 1
+  _fixed : BitVec 6 := 0b011011#6
+  op : BitVec 1
+  b40 : BitVec 5
+  imm14 : BitVec 14
+  Rt : BitVec 5
+  deriving DecidableEq, Repr
+
+instance : ToString Test_branch_cls where toString a := toString (repr a)
+
+def Test_branch_cls.toBitVec32 (x : Test_branch_cls) : BitVec 32 :=
+  x.b5 ++ x._fixed ++ x.op ++ x.b40 ++ x.imm14 ++ x.Rt
+
 structure Uncond_branch_imm_cls where
   op     : BitVec 1              -- [31:31]
   _fixed : BitVec 5 := 0b00101#5 -- [30:26]
@@ -44,6 +59,11 @@ structure Uncond_branch_reg_cls where
 deriving DecidableEq, Repr
 
 instance : ToString Uncond_branch_reg_cls where toString a := toString (repr a)
+
+/-- Plain BR, BLR and RET; authenticated/exception-return neighbors are separate. -/
+def Uncond_branch_reg_cls.isSupported (x : Uncond_branch_reg_cls) : Bool :=
+  (x.opc == 0#4 || x.opc == 1#4 || x.opc == 2#4) &&
+  x.op2 == 31#5 && x.op3 == 0#6 && x.op4 == 0#5
 
 structure Cond_branch_imm_cls where
   _fixed : BitVec 8 := 0b01010100#8 -- [31:24]
@@ -79,6 +99,7 @@ def Clear_exclusive_cls.toBitVec32 (x : Clear_exclusive_cls) : BitVec 32 :=
 
 inductive BranchInst where
   | Clear_exclusive : Clear_exclusive_cls → BranchInst
+  | Test_branch : Test_branch_cls → BranchInst
   | Compare_branch :
     Compare_branch_cls → BranchInst
   | Uncond_branch_imm :

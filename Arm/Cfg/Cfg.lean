@@ -193,6 +193,12 @@ outputs: `haltp` : `Bool` -- whether the program halts
 -/
 protected def addArmInstToCfg (pc : BitVec 64) (raw_inst : BitVec 32)
    (arm_inst : ArmInst) (cfg : Cfg) : Except Format (Bool × Cfg) := do
+   -- Dynamic BR/BLR targets cannot be soundly replaced with a RET edge.
+   match arm_inst with
+   | .BR (.Uncond_branch_reg inst) =>
+     if !inst.isSupported || inst.opc != 2#4 then
+       throw f!"CFG requires a resolved register-branch target at {pc}."
+   | _ => pure ()
    let default_to_pc ← pure (pc + 4#64)
    -- variable pc_inst: the type of instruction InstType: Seq, BrOrg, BrTgt, Ret
    -- variable to_insts: an over-approximation of possible next pcs,
@@ -206,6 +212,10 @@ protected def addArmInstToCfg (pc : BitVec 64) (raw_inst : BitVec 32)
    | BR i =>
      open BranchInst in
      match i with
+      | Test_branch inst => -- TBZ, TBNZ
+        let target := BR.Test_branch_inst.branch_taken_pc inst pc
+        let condition : CondHoldsFn := fun state => BR.Test_branch_inst.condition_holds inst state
+        (false, BrOrg pc condition, [Seq default_to_pc, BrTgt target condition])
       | Compare_branch inst => -- CBZ, CBNZ
         let branch_taken_pc := BR.Compare_branch_inst.branch_taken_pc inst pc
         let condition_holds : CondHoldsFn :=
@@ -217,13 +227,8 @@ protected def addArmInstToCfg (pc : BitVec 64) (raw_inst : BitVec 32)
         -- These are unconditional branch instructions; we do not add
         -- BrTgt/BrOrg or the default_to_pc here.
         (false, Seq pc, [Seq branch_taken_pc])
-      | Uncond_branch_reg _ => -- RET
-        -- (FIXME) Extend CFG analysis when instructions other than
-        -- RET are implemented.
-        --
-        -- (FIXME) The to_inst for RET can be the value in the GPR
-        -- indexed by `inst.Rn`, but we can figure that value out only
-        -- after symbolic simulation.
+      | Uncond_branch_reg _ => -- RET; unresolved BR/BLR rejected above.
+        -- The concrete return target is available after symbolic simulation.
         (true, Ret pc, [Ret pc])
       | Cond_branch_imm inst =>
         let branch_taken_pc := BR.Cond_branch_imm_inst.branch_taken_pc inst pc

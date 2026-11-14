@@ -90,6 +90,8 @@ def decode_branch (i : BitVec 32) : Option ArmInst :=
     BR (Clear_exclusive {imm4})
   | [sf:1, 011010, op:1, imm19:19, Rt:5] =>
     BR (Compare_branch {sf, op, imm19, Rt})
+  | [b5:1, 011011, op:1, b40:5, imm14:14, Rt:5] =>
+    BR (Test_branch {b5, op, b40, imm14, Rt})
   | [op:1, 00101, imm26:26] =>
     BR (Uncond_branch_imm {op, imm26})
   | [1101011, opc:4, op2:5, op3:6, Rn:5, op4:5] =>
@@ -105,12 +107,14 @@ Return the indices of all the GPR/SFP registers that may be modified by the
 BR instruction `i`.
 -/
 def BR.mayModifiedRegs (i : BitVec 32) : Except Format (List RegType) :=
-  if let some _ := decode_branch i then
-    -- None of the branch instructions modify any GPR or SFP registers.
-    .ok []
-  else
-    .error
-      f!"Instruction 0x{i.toHex} is not of class Branch Processing."
+  match decode_branch i with
+  | some (.BR (.Uncond_branch_imm inst)) =>
+    .ok (if inst.op == 1#1 then [.GPR 30#5] else [])
+  | some (.BR (.Uncond_branch_reg inst)) =>
+    if inst.isSupported then .ok (if inst.opc == 1#4 then [.GPR 30#5] else [])
+    else .error f!"Unsupported register branch 0x{i.toHex}."
+  | some _ => .ok []
+  | none => .error f!"Instruction 0x{i.toHex} is not of class Branch Processing."
 
 def decode_data_proc_reg (i : BitVec 32) : Option ArmInst :=
   open ArmInst in

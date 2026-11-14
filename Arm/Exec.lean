@@ -35,6 +35,8 @@ def exec_inst (ai : ArmInst) (s : ArmState) (memory : MemoryMode := .total) : Ar
 
     | BR (BranchInst.Clear_exclusive i) =>
       BR.exec_clear_exclusive i s memory
+    | BR (BranchInst.Test_branch i) =>
+      BR.exec_test_branch i s
     | BR (BranchInst.Compare_branch i) =>
       BR.exec_compare_branch i s
     | BR (BranchInst.Uncond_branch_imm i) =>
