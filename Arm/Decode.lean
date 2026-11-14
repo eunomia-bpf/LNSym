@@ -86,6 +86,8 @@ def decode_branch (i : BitVec 32) : Option ArmInst :=
   open ArmInst in
   open BranchInst in
   match_bv i with
+  | [110101010011, o0:1, op1:3, CRn:4, CRm:4, op2:3, Rt:5] =>
+    BR (Read_system_register {o0, op1, CRn, CRm, op2, Rt})
   | [11010101000000110011, imm4:4, 01011111] =>
     BR (Clear_exclusive {imm4})
   | [sf:1, 011010, op:1, imm19:19, Rt:5] =>
@@ -108,6 +110,9 @@ BR instruction `i`.
 -/
 def BR.mayModifiedRegs (i : BitVec 32) : Except Format (List RegType) :=
   match decode_branch i with
+  | some (.BR (.Read_system_register inst)) =>
+    if inst.isThreadPointer then .ok (if inst.Rt == 31#5 then [] else [.GPR inst.Rt])
+    else .error f!"Unsupported system register in 0x{i.toHex}."
   | some (.BR (.Uncond_branch_imm inst)) =>
     .ok (if inst.op == 1#1 then [.GPR 30#5] else [])
   | some (.BR (.Uncond_branch_reg inst)) =>

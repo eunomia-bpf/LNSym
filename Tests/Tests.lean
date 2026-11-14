@@ -35,3 +35,4 @@ import Tests.AtomicMemoryTest
 import Tests.ExclusiveMemoryTest
 import Tests.PairMemoryTest
 import Tests.CheckedMemoryTest
+import Tests.ThreadPointerTest

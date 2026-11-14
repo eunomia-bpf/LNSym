@@ -33,6 +33,8 @@ def exec_inst (ai : ArmInst) (s : ArmState) (memory : MemoryMode := .total) : Ar
     | DPI (DataProcImmInst.Move_wide_imm i) =>
       DPI.exec_move_wide_imm i s
 
+    | BR (BranchInst.Read_system_register i) =>
+      BR.exec_read_system_register i s
     | BR (BranchInst.Clear_exclusive i) =>
       BR.exec_clear_exclusive i s memory
     | BR (BranchInst.Test_branch i) =>

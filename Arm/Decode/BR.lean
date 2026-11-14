@@ -74,6 +74,28 @@ deriving DecidableEq, Repr
 
 instance : ToString Cond_branch_imm_cls where toString a := toString (repr a)
 
+/-- MRS (system register); op0 is 2 + o0. -/
+structure Read_system_register_cls where
+  _fixed : BitVec 12 := 0xd53#12
+  o0 : BitVec 1
+  op1 : BitVec 3
+  CRn : BitVec 4
+  CRm : BitVec 4
+  op2 : BitVec 3
+  Rt : BitVec 5
+  deriving DecidableEq, Repr
+
+instance : ToString Read_system_register_cls where toString a := toString (repr a)
+
+def Read_system_register_cls.encoding (x : Read_system_register_cls) : BitVec 16 :=
+  1#1 ++ x.o0 ++ x.op1 ++ x.CRn ++ x.CRm ++ x.op2
+
+def Read_system_register_cls.isThreadPointer (x : Read_system_register_cls) : Bool :=
+  x.encoding == 0xc684#16 || x.encoding == 0xe682#16
+
+def Read_system_register_cls.toBitVec32 (x : Read_system_register_cls) : BitVec 32 :=
+  x._fixed ++ x.o0 ++ x.op1 ++ x.CRn ++ x.CRm ++ x.op2 ++ x.Rt
+
 structure Hints_cls where
   _fixed1 : BitVec 20 := 0b11010101000000110010#20 -- [31:12]
   CRm     : BitVec 4                               -- [11:8]
@@ -98,6 +120,7 @@ def Clear_exclusive_cls.toBitVec32 (x : Clear_exclusive_cls) : BitVec 32 :=
   x._fixed1 ++ x.imm4 ++ x._fixed2
 
 inductive BranchInst where
+  | Read_system_register : Read_system_register_cls → BranchInst
   | Clear_exclusive : Clear_exclusive_cls → BranchInst
   | Test_branch : Test_branch_cls → BranchInst
   | Compare_branch :

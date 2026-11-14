@@ -91,6 +91,7 @@ inductive StateError where
   | Unimplemented (e : String) : StateError
   | Illegal (e : String)       : StateError
   | Fault (e : String)         : StateError
+  | SystemRegisterDenied (encoding : BitVec 16) : StateError
   | Other (e : String)         : StateError
 deriving DecidableEq, Repr
 
@@ -99,6 +100,7 @@ attribute [state_simp_rules] StateError.NotFound.injEq
 attribute [state_simp_rules] StateError.Unimplemented.injEq
 attribute [state_simp_rules] StateError.Illegal.injEq
 attribute [state_simp_rules] StateError.Fault.injEq
+attribute [state_simp_rules] StateError.SystemRegisterDenied.injEq
 attribute [state_simp_rules] StateError.Other.injEq
 
 -- PFlag (Process State's Flags)
@@ -240,6 +242,14 @@ structure ExclusiveState where
   accesses : List ExclusiveAccess := []
   deriving DecidableEq, Repr
 
+/-- Resolved per-step MRS outcomes for the current EL, trap and virtualization
+binding. Some values may be redirected by virtualization; these are not cached
+physical-register constants. None denotes architectural access denial. -/
+structure ThreadPointerInputs where
+  el1 : Option (BitVec 64)
+  el2 : Option (BitVec 64)
+  deriving DecidableEq, Repr
+
 @[ext]
 structure ArmState where
   /-- General-purpose registers: register 31 is the stack pointer. -/
@@ -261,6 +271,8 @@ structure ArmState where
   /-- Successful atomic accesses, in execution order. Ordinary steps preserve it. -/
   atomicAccesses : List AtomicAccess := []
   exclusive : ExclusiveState := {}
+  /-- No implicit successful environment for MRS. -/
+  threadPointerInputs : Option ThreadPointerInputs := none
   memoryProfile : Option MemoryProfile := none
   memoryAccesses : List MemoryAccessEvent := []
   /--
@@ -309,6 +321,13 @@ def read_memory_accesses (s : ArmState) : List MemoryAccessEvent := s.memoryAcce
 @[state_simp_rules]
 def record_memory_access (event : MemoryAccessEvent) (s : ArmState) : ArmState :=
   { s with memoryAccesses := s.memoryAccesses ++ [event] }
+
+@[state_simp_rules]
+def read_thread_pointer_inputs (s : ArmState) : Option ThreadPointerInputs := s.threadPointerInputs
+
+@[state_simp_rules]
+def write_thread_pointer_inputs (inputs : Option ThreadPointerInputs) (s : ArmState) : ArmState :=
+  { s with threadPointerInputs := inputs }
 
 ---- Basic State Accessors and Updaters (except memory) ----
 
@@ -1422,6 +1441,7 @@ theorem state_eq_iff_components_eq {s1 s2 : ArmState} :
    (read_exclusive_state s1 = read_exclusive_state s2) ∧
    (read_memory_profile s1 = read_memory_profile s2) ∧
    (read_memory_accesses s1 = read_memory_accesses s2) ∧
+   (read_thread_pointer_inputs s1 = read_thread_pointer_inputs s2) ∧
    (∀ (n : Nat) (addr : BitVec 64),
       read_mem_bytes n addr s1 = read_mem_bytes n addr s2)) := by
   constructor
@@ -1431,7 +1451,7 @@ theorem state_eq_iff_components_eq {s1 s2 : ArmState} :
     simp only [implies_true, and_self]
   case mpr =>
     intro h
-    obtain ⟨h_fields, h_program, h_atomic, h_exclusive, h_profile, h_accesses, h_mem⟩ := h
+    obtain ⟨h_fields, h_program, h_atomic, h_exclusive, h_profile, h_accesses, h_thread_pointer, h_mem⟩ := h
     apply ArmState.ext
     case gpr => rwa [reads_equal_implies_gpr_equal]
     case sfp => rwa [reads_equal_implies_sfp_equal]
@@ -1443,6 +1463,7 @@ theorem state_eq_iff_components_eq {s1 s2 : ArmState} :
     case exclusive => exact h_exclusive
     case memoryProfile => exact h_profile
     case memoryAccesses => exact h_accesses
+    case threadPointerInputs => exact h_thread_pointer
     case mem => rwa [read_mem_bytes_equal_implies_mem_equal]
   done
 
