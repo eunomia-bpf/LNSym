@@ -3,7 +3,7 @@ Copyright (c) 2023 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Author(s): Shilpi Goel
 -/
--- REV64/32/16
+-- REV64/32/16 and CNT
 
 import Arm.Decode
 import Arm.State
@@ -88,7 +88,7 @@ def vrev128_64_8 (x : BitVec 128) : BitVec 128 :=
     (by decide) (by decide)
 
 @[state_simp_rules]
-def exec_advanced_simd_two_reg_misc
+def exec_advanced_simd_rev
   (inst : Advanced_simd_two_reg_misc_cls) (s : ArmState) : ArmState :=
   open BitVec in
   let datasize := if inst.Q = 1#1 then 128 else 64 -- 64 << Uint(inst.Q)
@@ -136,6 +136,31 @@ def exec_advanced_simd_two_reg_misc
       let s := write_pc ((read_pc s) + 4#64) s
       s
 
+/-- Population count independently in each byte of a 64/128-bit vector. -/
+def simd_count_bytes (operand : BitVec n) : BitVec n := Id.run do
+  let mut result := 0#n
+  for e in [0:n / 8] do
+    let byte := elem_get operand e 8
+    let mut count := 0#8
+    for b in [0:8] do
+      count := count + zeroExtend 8 (extractLsb' b 1 byte)
+    result := elem_set result e 8 count
+  return result
+
+@[state_simp_rules]
+def exec_advanced_simd_two_reg_misc
+    (inst : Advanced_simd_two_reg_misc_cls) (s : ArmState) : ArmState :=
+  if inst.U = 0#1 && inst.opcode = 0b00101#5 then -- CNT
+    if inst.size != 0#2 then
+      write_err (StateError.Illegal s!"Illegal {inst} encountered!") s
+    else
+      let datasize := if inst.Q = 1#1 then 128 else 64
+      let result := simd_count_bytes (read_sfp datasize inst.Rn s)
+      let s := write_sfp datasize inst.Rd result s
+      write_pc (read_pc s + 4#64) s
+  else
+    exec_advanced_simd_rev inst s
+
 ----------------------------------------------------------------------
 
 partial def Advanced_simd_two_reg_misc_cls.rev64_16.rand : Cosim.CosimM (Option (BitVec 32)) := do
@@ -170,7 +195,14 @@ partial def Advanced_simd_two_reg_misc_cls.rev32.rand : Cosim.CosimM (Option (Bi
   else
     pure (some (inst.toBitVec32))
 
+def Advanced_simd_two_reg_misc_cls.cnt.rand : Cosim.CosimM (Option (BitVec 32)) := do
+  let inst : Advanced_simd_two_reg_misc_cls :=
+    { Q := ← BitVec.rand 1, U := 0#1, size := 0#2, opcode := 0b00101#5,
+      Rn := ← BitVec.rand 5, Rd := ← BitVec.rand 5 }
+  pure (some inst.toBitVec32)
+
 /-- Generate random instructions of Advanced_simd_two_reg_misc_cls class. -/
 def Advanced_simd_two_reg_misc_cls.rand : List (Cosim.CosimM (Option (BitVec 32))) :=
   [Advanced_simd_two_reg_misc_cls.rev64_16.rand,
-   Advanced_simd_two_reg_misc_cls.rev32.rand]
+   Advanced_simd_two_reg_misc_cls.rev32.rand,
+   Advanced_simd_two_reg_misc_cls.cnt.rand]

@@ -63,6 +63,8 @@ def exec_inst (ai : ArmInst) (s : ArmState) : ArmState :=
     DPSFP.exec_crypto_four_reg i s
   | DPSFP (DataProcSFPInst.Advanced_simd_two_reg_misc i) =>
     DPSFP.exec_advanced_simd_two_reg_misc i s
+  | DPSFP (DataProcSFPInst.Advanced_simd_across_lanes i) =>
+    DPSFP.exec_advanced_simd_across_lanes i s
   | DPSFP (DataProcSFPInst.Advanced_simd_extract i) =>
     DPSFP.exec_advanced_simd_extract i s
   | DPSFP (DataProcSFPInst.Advanced_simd_permute i) =>

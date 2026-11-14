@@ -90,6 +90,24 @@ instance : ToString Advanced_simd_two_reg_misc_cls where toString a := toString 
 def Advanced_simd_two_reg_misc_cls.toBitVec32 (x : Advanced_simd_two_reg_misc_cls) : BitVec 32 :=
   x._fixed1 ++ x.Q ++ x.U ++ x._fixed2 ++ x.size ++ x._fixed3 ++ x.opcode ++ x._fixed4 ++ x.Rn ++ x.Rd
 
+structure Advanced_simd_across_lanes_cls where
+  _fixed1 : BitVec 1 := 0#1            -- [31:31]
+  Q       : BitVec 1                   -- [30:30]
+  U       : BitVec 1                   -- [29:29]
+  _fixed2 : BitVec 5 := 0b01110#5      -- [28:24]
+  size    : BitVec 2                   -- [23:22]
+  _fixed3 : BitVec 5 := 0b11000#5      -- [21:17]
+  opcode  : BitVec 5                   -- [16:12]
+  _fixed4 : BitVec 2 := 0b10#2         -- [11:10]
+  Rn      : BitVec 5                   -- [9:5]
+  Rd      : BitVec 5                   -- [4:0]
+deriving DecidableEq, Repr
+
+instance : ToString Advanced_simd_across_lanes_cls where toString a := toString (repr a)
+
+def Advanced_simd_across_lanes_cls.toBitVec32 (x : Advanced_simd_across_lanes_cls) : BitVec 32 :=
+  x._fixed1 ++ x.Q ++ x.U ++ x._fixed2 ++ x.size ++ x._fixed3 ++ x.opcode ++ x._fixed4 ++ x.Rn ++ x.Rd
+
 structure Advanced_simd_copy_cls where
   _fixed1 : BitVec 1 := 0b0#1        -- [31:31]
   Q       : BitVec 1                 -- [30:30]
@@ -312,6 +330,8 @@ inductive DataProcSFPInst where
     Crypto_four_reg_cls → DataProcSFPInst
   | Advanced_simd_two_reg_misc :
     Advanced_simd_two_reg_misc_cls → DataProcSFPInst
+  | Advanced_simd_across_lanes :
+    Advanced_simd_across_lanes_cls → DataProcSFPInst
   | Advanced_simd_copy :
     Advanced_simd_copy_cls → DataProcSFPInst
   | Advanced_simd_extract :

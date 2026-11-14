@@ -157,6 +157,8 @@ def decode_data_proc_sfp (i : BitVec 32) : Option ArmInst :=
     DPSFP (Crypto_four_reg {Op0, Rm, Ra, Rn, Rd})
   | [0, Q:1, U:1, 01110, size:2, 10000, opcode:5, 10, Rn:5, Rd:5] =>
     DPSFP (Advanced_simd_two_reg_misc {Q, U, size, opcode, Rn, Rd})
+  | [0, Q:1, U:1, 01110, size:2, 11000, opcode:5, 10, Rn:5, Rd:5] =>
+    DPSFP (Advanced_simd_across_lanes {Q, U, size, opcode, Rn, Rd})
   | [0, Q:1, op:1, 01110000, imm5:5, 0, imm4:4, 1, Rn:5, Rd:5] =>
     DPSFP (Advanced_simd_copy {Q, op, imm5, imm4, Rn, Rd})
   | [0, Q:1, 101110, op2:2, 0, Rm:5, 0, imm4:4, 0, Rn:5, Rd:5] =>
