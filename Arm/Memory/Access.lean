@@ -80,4 +80,52 @@ def write (mode : MemoryMode) (bytes : Nat) (address : BitVec 64)
       else
         .error (mode.fault (.write address bytes) s!"Write access denied at {address} ({bytes} bytes)" s)
 
+
+/-- Effective flat-memory atomic alignment profile. Ordinary pair granularity
+alone does not disable alignment faults. This follows ASL2023-03
+AArch64_UnalignedAccessFaults: even with LSE2, the range must fit one aligned
+16-byte quantity. The original total-memory domain stays naturally aligned. -/
+@[state_simp_rules]
+def atomicAligned (mode : MemoryMode) (bytes : Nat) (address : BitVec 64)
+    (s : ArmState) : Bool :=
+  address.toNat % bytes == 0 ||
+  (mode == .checked && (read_memory_profile s).any (fun profile =>
+    profile.lse2UnalignedWithin16 && address.toNat % 16 + bytes <= 16))
+
+/-- One indivisible flat-memory RMW effect. Permission denial precedes any
+memory, initialization, atomic-history or register commit. These byte permissions
+are platform inputs, not a model of MMU translation or physical external aborts. -/
+@[state_simp_rules]
+def atomic (mode : MemoryMode) (operation : AtomicOperation) (bytes : Nat)
+    (address : BitVec 64) (operand : BitVec (bytes * 8)) (acquire release : Bool)
+    (s : ArmState) : Except ArmState (BitVec (bytes * 8) × ArmState) := do
+  let s ← match mode with
+    | .total => .ok s
+    | .checked =>
+      match read_memory_profile s with
+      | none => .error (write_err (.Unimplemented "Checked atomic requires a memory profile") s)
+      | some profile =>
+        if !permitted profile.readable address bytes then
+          .error (mode.fault (.read address bytes) s!"Atomic read access denied at {address}" s)
+        else if !permitted profile.writable address bytes then
+          .error (mode.fault (.write address bytes) s!"Atomic write access denied at {address}" s)
+        else .ok s
+  let old := read_mem_bytes bytes address s
+  let value := match operation with
+    | .add => old + operand
+    | .clear => old &&& ~~~operand
+    | .set => old ||| operand
+  let access : AtomicAccess :=
+    { operation, address, bytes, oldValue := zeroExtend 64 old,
+      newValue := zeroExtend 64 value, acquire, release }
+  let s := match mode, read_memory_profile s with
+    | .checked, some profile =>
+      let initialized := fun a =>
+        if (a - address).toNat < bytes then true else profile.initialized a
+      let s := write_memory_profile (some { profile with initialized }) s
+      record_memory_access (.atomic access (permitted profile.initialized address bytes)) s
+    | _, _ => s
+  let s := record_atomic_access access (write_mem_bytes bytes address value s)
+  .ok (old, s)
+
 end MemoryMode

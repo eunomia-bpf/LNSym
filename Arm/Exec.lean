@@ -9,7 +9,7 @@ import Arm.Insts
 
 def exec_inst (ai : ArmInst) (s : ArmState) (memory : MemoryMode := .total) : ArmState :=
   let unsupportedChecked := match ai with
-    | .LDST (.Atomic_memory_op _) | .LDST (.Exclusive_single _)
+    | .LDST (.Exclusive_single _)
     | .LDST (.Advanced_simd_multiple_struct _)
     | .LDST (.Advanced_simd_multiple_struct_post_indexed _) => true
     | _ => false
@@ -104,7 +104,7 @@ def exec_inst (ai : ArmInst) (s : ArmState) (memory : MemoryMode := .total) : Ar
     | LDST (LDSTInst.Exclusive_single i) =>
       LDST.exec_exclusive_single i s
     | LDST (LDSTInst.Atomic_memory_op i) =>
-      LDST.exec_atomic_memory_op i s
+      LDST.exec_atomic_memory_op i s memory
     | LDST (LDSTInst.Reg_imm_pre_indexed i) =>
       LDST.exec_reg_imm_pre_indexed i s memory
     | LDST (LDSTInst.Reg_register_offset i) =>

@@ -169,6 +169,8 @@ structure MemoryProfile where
   spAlignmentCheck : Bool := true
   /-- Effective pair single-access profile (FEAT_LSE2). -/
   pairSingleAccess : Bool := false
+  /-- Effective FEAT_LSE2 with alignment enforcement disabled, for atomics. -/
+  lse2UnalignedWithin16 : Bool := false
   deriving Repr
 
 inductive MemoryAccessKind where
@@ -179,11 +181,13 @@ inductive MemoryAccessFault where
   | read (address : BitVec 64) (bytes : Nat)
   | write (address : BitVec 64) (bytes : Nat)
   | spAlignment (address : BitVec 64)
+  | alignment (address : BitVec 64) (bytes : Nat)
   deriving DecidableEq, Repr
 
 inductive MemoryAccessEvent where
   | memory (kind : MemoryAccessKind) (address : BitVec 64)
       (value : List (BitVec 8)) (initialized : Bool)
+  | atomic (access : AtomicAccess) (initialized : Bool)
   | fault (reason : MemoryAccessFault)
   deriving DecidableEq, Repr
 

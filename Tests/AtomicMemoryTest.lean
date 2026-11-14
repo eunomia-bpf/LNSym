@@ -53,7 +53,7 @@ private def check (word : BitVec 32) (initial : BitVec 128) (operand old : BitVe
     | .ok regs => if dst == 31#5 then regs == [] else regs == [.GPR dst]
     | _ => false)
 
-example : ([
+private def vectors : List (BitVec 32 × BitVec 128 × BitVec 64 × BitVec 64 × BitVec 128 × Bool × Bool × AtomicOperation) := [
   (0x38220020#32, 0x0#128, 0xffffffffffffffff#64, 0x0#64, 0xff#128, false, false, .add),
   (0x38220020#32, 0xffffffffffffffffffffffffffffffff#128, 0x1#64, 0xff#64, 0xffffffffffffffffffffffffffffff00#128, false, false, .add),
   (0x38220020#32, 0x112233445566778899aabbccddeeff#128, 0xffeeddcc800180ff#64, 0xff#64, 0x112233445566778899aabbccddeefe#128, false, false, .add),
@@ -294,7 +294,9 @@ example : ([
   (0xf8e233e0#32, 0x112233445566778899aabbccddeeff#128, 0xffeeddcc800180ff#64, 0x8899aabbccddeeff#64, 0x11223344556677ffffffffccddeeff#128, true, true, .set),
   (0xf8ff33ff#32, 0x112233445566778899aabbccddeeff#128, 0xffeeddcc800180ff#64, 0x8899aabbccddeeff#64, 0x112233445566778899aabbccddeeff#128, false, true, .set),
   (0xf8e13021#32, 0x112233445566778899aabbccddeeff#128, 0xffeeddcc800180ff#64, 0x8899aabbccddeeff#64, 0x112233445566778899aabbccddfeff#128, true, true, .set)
-] : List (BitVec 32 × BitVec 128 × BitVec 64 × BitVec 64 × BitVec 128 × Bool × Bool × AtomicOperation)).all
+]
+
+example : vectors.all
     (fun (word, initial, operand, old, expected, acquire, release, operation) =>
       check word initial operand old expected acquire release operation) = true := by native_decide
 
@@ -326,6 +328,118 @@ example : ([
 
 -- An ordinary instruction preserves the pre-existing atomic history.
 example : read_atomic_accesses (run 1 (entry 0xd503201f#32 0#128 0#64)) = [priorAccess] := by
+  native_decide
+
+
+-- Reuse the assembled integer goldens above, including aliases and overlapping
+-- registers. Denied writes, including no-op RMWs, must not expose a read effect
+-- or initialize memory. Both-denied cases establish read-denial priority.
+private def priorMemoryEvent : MemoryAccessEvent := .memory .read 8#64 [3#8] true
+
+private def checkChecked (word : BitVec 32) (initial : BitVec 128) (operand old : BitVec 64)
+    (expected : BitVec 128) (acquire release : Bool) (operation : AtomicOperation)
+    (profileCase : Nat) : Bool :=
+  let address := 0x1000#64
+  let bytes := 1 <<< (extractLsb' 30 2 word).toNat
+  let last := address + BitVec.ofNat 64 (bytes - 1)
+  let denyRead := profileCase == 2 || profileCase == 3 || profileCase == 6
+  let denyWrite := profileCase == 4 || profileCase == 5 || profileCase == 6
+  let denied := if profileCase == 3 || profileCase == 5 then last else address
+  let profile : MemoryProfile :=
+    { readable := fun a => !(denyRead && a == denied) && a != 0x2000#64,
+      writable := fun a => !(denyWrite && a == denied) && a != 0x2000#64,
+      initialized := fun a => profileCase == 7 || (profileCase != 1 && a != last) }
+  let s := write_memory_profile (some profile)
+    (record_memory_access priorMemoryEvent (entry word initial operand))
+  let t := stepi_checked s
+  let success := !denyRead && !denyWrite
+  let dst := extractLsb' 0 5 word
+  let access : AtomicAccess :=
+    { operation, address, bytes, oldValue := old,
+      newValue := zeroExtend 64 (extractLsb' 0 (bytes * 8) expected), acquire, release }
+  let effect := if success then MemoryAccessEvent.atomic access (profileCase == 7)
+    else .fault (if denyRead then .read address bytes else .write address bytes)
+  (if success then read_err t == .None else
+    match read_err t with | .Fault _ => true | _ => false) &&
+  read_pc t == (if success then 4#64 else 0#64) &&
+  read_pstate t == read_pstate s && t.program == s.program &&
+  read_exclusive_state t == read_exclusive_state s &&
+  read_atomic_accesses t == (if success then [priorAccess, access] else [priorAccess]) &&
+  read_memory_accesses t == [priorMemoryEvent, effect] &&
+  read_mem_bytes 16 address t == (if success then expected else initial) &&
+  read_mem_bytes 1 0xfff#64 t == 0xa5#8 && read_mem_bytes 1 0x1010#64 t == 0x5a#8 &&
+  (match read_memory_profile t with
+    | none => false
+    | some after =>
+      after.spAlignmentCheck == profile.spAlignmentCheck &&
+      after.pairSingleAccess == profile.pairSingleAccess &&
+      after.lse2UnalignedWithin16 == profile.lse2UnalignedWithin16 &&
+      (List.range 18).all (fun i =>
+        let a := 0xfff#64 + BitVec.ofNat 64 i
+        after.readable a == profile.readable a && after.writable a == profile.writable a &&
+        after.initialized a == (if success && (a - address).toNat < bytes then true
+          else profile.initialized a))) &&
+  (List.range 32).all (fun n =>
+    let reg := BitVec.ofNat 5 n
+    read_gpr 64 reg t == (if success && dst != 31#5 && reg == dst then old
+      else read_gpr 64 reg s) && read_sfp 128 reg t == read_sfp 128 reg s)
+
+example : vectors.all
+    (fun (word, initial, operand, old, expected, acquire, release, operation) =>
+      (List.range 8).all (checkChecked word initial operand old expected acquire release operation)) = true := by
+  native_decide
+
+-- Misalignment precedes permissions. Effective LSE2 allows only contained
+-- quantities, including wrapping addresses; pair access shape alone cannot.
+private def checkAlignment (word : BitVec 32) (address old : BitVec 64)
+    (allowUnaligned spCheck deny natural : Bool) : Bool :=
+  let bytes := 1 <<< (extractLsb' 30 2 word).toNat
+  let s := entry word 0#128 0#64
+  let s := write_gpr 64 1#5 address (write_gpr 64 31#5 address s)
+  let s := write_mem_bytes bytes address (old.setWidth (bytes * 8)) s
+  let profile : MemoryProfile :=
+    { readable := fun _ => !deny, writable := fun _ => !deny,
+      initialized := fun _ => true, spAlignmentCheck := spCheck,
+      pairSingleAccess := true, lse2UnalignedWithin16 := allowUnaligned }
+  let s := write_memory_profile (some profile) s
+  let t := stepi_checked s
+  let spFault := extractLsb' 5 5 word == 31#5 && spCheck && address.toNat % 16 != 0
+  let aligned := natural || (allowUnaligned && address.toNat % 16 + bytes <= 16)
+  let success := !spFault && aligned && !deny
+  let access : AtomicAccess :=
+    { operation := .add, address, bytes, oldValue := old, newValue := old,
+      acquire := false, release := false }
+  let event := if spFault then MemoryAccessEvent.fault (.spAlignment address)
+    else if !aligned then .fault (.alignment address bytes)
+    else if deny then .fault (.read address bytes) else .atomic access true
+  read_pc t == (if success then 4#64 else 0#64) &&
+  (if success then read_err t == .None else
+    match read_err t with | .Fault _ => true | _ => false) &&
+  read_memory_accesses t == [event] &&
+  read_atomic_accesses t == (if success then [priorAccess, access] else [priorAccess]) &&
+  read_mem_bytes bytes address t == old.setWidth (bytes * 8) &&
+  read_pstate t == read_pstate s && read_exclusive_state t == read_exclusive_state s &&
+  (List.range 32).all (fun n =>
+    let reg := BitVec.ofNat 5 n
+    read_gpr 64 reg t == (if success && reg == 0#5 then old else read_gpr 64 reg s) &&
+    read_sfp 128 reg t == read_sfp 128 reg s) &&
+  (let total := stepi s;
+    (if (extractLsb' 5 5 word == 31#5 && address.toNat % 16 != 0) || !natural then
+      match read_err total with | .Fault _ => true | _ => false
+    else read_err total == .None) && read_memory_accesses total == [])
+
+example : ([
+  (0x78220020#32, 0x1001#64, 0x2211#64, false),
+  (0xb8220020#32, 0x1001#64, 0x44332211#64, false),
+  (0xf8220020#32, 0x1001#64, 0x8877665544332211#64, false),
+  (0xf8220020#32, 0x1009#64, 0x8877665544332211#64, false),
+  (0xf8220020#32, 0xffffffffffffffff#64, 0x8877665544332211#64, false),
+  (0xf8220020#32, 0xfffffffffffffff8#64, 0x8877665544332211#64, true),
+  (0xf82203e0#32, 0x1008#64, 0x8877665544332211#64, true),
+  (0xf82203e0#32, 0x1001#64, 0x8877665544332211#64, false)
+] : List (BitVec 32 × BitVec 64 × BitVec 64 × Bool)).all (fun (word, address, old, natural) =>
+    [false,true].all (fun allow => [false,true].all (fun sp =>
+      [false,true].all (fun deny => checkAlignment word address old allow sp deny natural)))) = true := by
   native_decide
 
 end AtomicMemoryTest

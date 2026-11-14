@@ -254,7 +254,7 @@ example : [false,true].all (fun checkSP =>
 -- Unsupported checked classes and missing profiles never use the total domain.
 example : ([0xf9400020#32, 0xf8220020#32, 0xc85f7c20#32, 0x4c407020#32] : List (BitVec 32)).all
     (fun word => [false,true].all (fun bound =>
-      if word == 0xf9400020#32 && bound then true else
+      if (word == 0xf9400020#32 || word == 0xf8220020#32) && bound then true else
       let s := entry word 0x1000#64 0x1000#64
       let s := if bound then write_memory_profile (some {}) s else s
       let t := stepi_checked s
