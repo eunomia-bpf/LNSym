@@ -128,4 +128,11 @@ def atomic (mode : MemoryMode) (operation : AtomicOperation) (bytes : Nat)
   let s := record_atomic_access access (write_mem_bytes bytes address value s)
   .ok (old, s)
 
+/-- Place monitor actions in the same ordered trace as memory effects/faults. -/
+@[state_simp_rules]
+def observeExclusive (mode : MemoryMode) (access : ExclusiveAccess) (s : ArmState) : ArmState :=
+  match mode with
+  | .total => s
+  | .checked => record_memory_access (.exclusive access) s
+
 end MemoryMode

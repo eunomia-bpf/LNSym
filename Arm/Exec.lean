@@ -9,7 +9,6 @@ import Arm.Insts
 
 def exec_inst (ai : ArmInst) (s : ArmState) (memory : MemoryMode := .total) : ArmState :=
   let unsupportedChecked := match ai with
-    | .LDST (.Exclusive_single _)
     | .LDST (.Advanced_simd_multiple_struct _)
     | .LDST (.Advanced_simd_multiple_struct_post_indexed _) => true
     | _ => false
@@ -35,7 +34,7 @@ def exec_inst (ai : ArmInst) (s : ArmState) (memory : MemoryMode := .total) : Ar
       DPI.exec_move_wide_imm i s
 
     | BR (BranchInst.Clear_exclusive i) =>
-      BR.exec_clear_exclusive i s
+      BR.exec_clear_exclusive i s memory
     | BR (BranchInst.Compare_branch i) =>
       BR.exec_compare_branch i s
     | BR (BranchInst.Uncond_branch_imm i) =>
@@ -102,7 +101,7 @@ def exec_inst (ai : ArmInst) (s : ArmState) (memory : MemoryMode := .total) : Ar
       DPSFP.exec_conversion_between_FP_and_Int i s
 
     | LDST (LDSTInst.Exclusive_single i) =>
-      LDST.exec_exclusive_single i s
+      LDST.exec_exclusive_single i s memory
     | LDST (LDSTInst.Atomic_memory_op i) =>
       LDST.exec_atomic_memory_op i s memory
     | LDST (LDSTInst.Reg_imm_pre_indexed i) =>

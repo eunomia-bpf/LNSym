@@ -184,13 +184,6 @@ inductive MemoryAccessFault where
   | alignment (address : BitVec 64) (bytes : Nat)
   deriving DecidableEq, Repr
 
-inductive MemoryAccessEvent where
-  | memory (kind : MemoryAccessKind) (address : BitVec 64)
-      (value : List (BitVec 8)) (initialized : Bool)
-  | atomic (access : AtomicAccess) (initialized : Bool)
-  | fault (reason : MemoryAccessFault)
-  deriving DecidableEq, Repr
-
 /-- The implementation's physical reservation range, not a virtual-pointer tag. -/
 structure ExclusiveMonitor where
   physicalStart : BitVec 64
@@ -230,6 +223,14 @@ structure ExclusiveAccess where
   acquire : Bool
   release : Bool
   success : Bool
+  deriving DecidableEq, Repr
+
+inductive MemoryAccessEvent where
+  | memory (kind : MemoryAccessKind) (address : BitVec 64)
+      (value : List (BitVec 8)) (initialized : Bool)
+  | exclusive (access : ExclusiveAccess)
+  | atomic (access : AtomicAccess) (initialized : Bool)
+  | fault (reason : MemoryAccessFault)
   deriving DecidableEq, Repr
 
 structure ExclusiveState where
