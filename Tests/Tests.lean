@@ -27,3 +27,4 @@ import «Tests».Tactics.AddressNormalization
 import «Tests».SMovUMovTest
 import Tests.ConditionalSelectTest
 import Tests.MultiplyDivideTest
+import Tests.ExtractCompareTest

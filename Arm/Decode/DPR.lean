@@ -132,7 +132,29 @@ instance : ToString Data_processing_three_source_cls where toString a := toStrin
 def Data_processing_three_source_cls.toBitVec32 (x : Data_processing_three_source_cls) : BitVec 32 :=
   x.sf ++ x.op54 ++ x._fixed ++ x.op31 ++ x.Rm ++ x.o0 ++ x.Ra ++ x.Rn ++ x.Rd
 
+-- CCMP/CCMN share the operand field between Rm and an unsigned imm5.
+structure Conditional_compare_cls where
+  sf        : BitVec 1
+  op        : BitVec 1
+  _fixed1   : BitVec 1 := 1#1
+  _fixed2   : BitVec 8 := 0b11010010#8
+  operand   : BitVec 5
+  cond      : BitVec 4
+  immediate : BitVec 1
+  _fixed3   : BitVec 1 := 0#1
+  Rn        : BitVec 5
+  _fixed4   : BitVec 1 := 0#1
+  nzcv      : BitVec 4
+deriving DecidableEq, Repr
+
+instance : ToString Conditional_compare_cls where toString a := toString (repr a)
+
+def Conditional_compare_cls.toBitVec32 (x : Conditional_compare_cls) : BitVec 32 :=
+  x.sf ++ x.op ++ x._fixed1 ++ x._fixed2 ++ x.operand ++ x.cond ++ x.immediate ++
+    x._fixed3 ++ x.Rn ++ x._fixed4 ++ x.nzcv
+
 inductive DataProcRegInst where
+  | Conditional_compare : Conditional_compare_cls → DataProcRegInst
   | Add_sub_carry :
     Add_sub_carry_cls → DataProcRegInst
   | Add_sub_shifted_reg :

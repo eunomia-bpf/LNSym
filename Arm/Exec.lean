@@ -16,6 +16,8 @@ def exec_inst (ai : ArmInst) (s : ArmState) : ArmState :=
     DPI.exec_pc_rel_addressing i s
   | DPI (DataProcImmInst.Logical_imm i) =>
     DPI.exec_logical_imm i s
+  | DPI (DataProcImmInst.Extract i) =>
+    DPI.exec_extract i s
   | DPI (DataProcImmInst.Bitfield i) =>
     DPI.exec_bitfield i s
   | DPI (DataProcImmInst.Move_wide_imm i) =>
@@ -36,6 +38,8 @@ def exec_inst (ai : ArmInst) (s : ArmState) : ArmState :=
     DPR.exec_add_sub_carry i s
   | DPR (DataProcRegInst.Add_sub_shifted_reg i) =>
     DPR.exec_add_sub_shifted_reg i s
+  | DPR (DataProcRegInst.Conditional_compare i) =>
+    DPR.exec_conditional_compare i s
   | DPR (DataProcRegInst.Conditional_select i) =>
     DPR.exec_conditional_select i s
   | DPR (DataProcRegInst.Data_processing_one_source i) =>

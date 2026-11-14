@@ -5,6 +5,7 @@ Author(s): Shilpi Goel
 -/
 import Arm.Insts.DPR.Add_sub_carry
 import Arm.Insts.DPR.Add_sub_shifted_reg
+import Arm.Insts.DPR.Conditional_compare
 import Arm.Insts.DPR.Conditional_select
 import Arm.Insts.DPR.Data_processing_one_source
 import Arm.Insts.DPR.Data_processing_two_source
@@ -18,6 +19,7 @@ def DPR.rand : List (Cosim.CosimM (Option (BitVec 32))) :=
   [DPR.Add_sub_carry_cls.rand,
    DPR.Add_sub_shifted_reg_cls.rand,
    DPR.Conditional_select_cls.rand,
+   DPR.Conditional_compare_cls.rand,
    DPR.Data_processing_one_source_cls.rand,
    DPR.Logical_shifted_reg_cls.rand] ++
   DPR.Data_processing_two_source_cls.rand ++
