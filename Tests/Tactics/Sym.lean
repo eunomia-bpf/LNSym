@@ -8,6 +8,12 @@ import Proofs.«AES-GCM».GCMGmultV8Sym
 -- Enable extra validations
 set_option Tactic.sym.debug true
 
+-- The non-effect reflexivity proof ranges over dependent register value types,
+-- not ArmState. Check the generated expression directly with the kernel.
+run_meta do
+  Lean.Meta.withLocalDeclD `s (Lean.mkConst ``ArmState) fun s =>
+    Lean.Meta.checkWithKernel (AxEffects.initial s).nonEffectProof
+
 namespace GCMGmultV8Program
 
 -- Test the behaviour of `sym_n` when `h_err` and `h_sp` are not present
@@ -44,8 +50,7 @@ example
     (h_sp : CheckSPAlignment s0)
     (h_s0_x0 : r (.GPR 0#5) s0 = x)
     (h_s0_x31 : r (.GPR 31#5) s0 = y) :
-    read_mem_bytes 4 (y + 12#64) s0 = (x.zeroExtend 32) := by
+    read_mem_bytes 4 (y + 12#64) sf = (x.zeroExtend 32) := by
   sym_n 1
-  sorry
 
 end SimpleMemory

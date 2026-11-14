@@ -131,7 +131,9 @@ def initial (state : Expr) : AxEffects where
     let f_nin_nil := -- `f ∉ []`
       mkNot <| mkStateFieldListMem (.bvar 0) (mkApp (.const ``List.nil [0]) SF)
     mkLambda `h .default f_nin_nil <|
-      mkEqReflArmState <| mkApp2 (mkConst ``r) (.bvar 1) state
+      mkApp2 (.const ``Eq.refl [1])
+        (mkApp (mkConst ``state_value) (.bvar 1))
+        (mkApp2 (mkConst ``r) (.bvar 1) state)
   memoryEffects     := .initial state
   programProof      :=
     -- `rfl`

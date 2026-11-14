@@ -273,20 +273,20 @@ def sym1 (whileTac : TSyntax `tactic) : SymM Unit := do
     withMainContext' <| do
       let hStep ← SymContext.findFromUserName h_step.getId
 
-      -- If we know SP is aligned, `simp` with that fact
-      if let some hSp := (← getThe AxEffects).stackAlignmentProof? then
-        let msg := m!"simplifying {hStep.toExpr} with {hSp}"
-        withTraceNode msg (tag := "simplifyHStep") <| do
-          let some goal ← do
-              let (ctx, simprocs) ← LNSymSimpContext
-                (config := {decide := false}) (exprs := #[hSp])
-              let goal ← getMainGoal
-              LNSymSimp goal ctx simprocs hStep.fvarId
-            | throwError "internal error: simp closed goal unexpectedly"
-          replaceMainGoal [goal]
-      else
-        trace[Tactic.sym] "we have no relevant local hypotheses, \
-          skipping simplification step"
+      -- Validity is already a precondition of symbolic execution. Normalize
+      -- conditional PC updates with that proof, in addition to SP alignment.
+      let effects ← getThe AxEffects
+      let mut exprs := #[(← effects.getField .ERR).proof]
+      if let some hSp := effects.stackAlignmentProof? then
+        exprs := exprs.push hSp
+      withTraceNode m!"simplifying {hStep.toExpr} with validity/alignment proofs"
+          (tag := "simplifyHStep") do
+        let some goal ← do
+            let (ctx, simprocs) ← LNSymSimpContext
+              (config := {decide := false}) (exprs := exprs)
+            LNSymSimp (← getMainGoal) ctx simprocs hStep.fvarId
+          | throwError "internal error: simp closed goal unexpectedly"
+        replaceMainGoal [goal]
 
     -- Prepare `h_program`,`h_err`,`h_pc`, etc. for next state
     withMainContext' <| do
