@@ -160,6 +160,54 @@ structure AtomicAccess where
   release : Bool
   deriving DecidableEq, Repr
 
+/-- The implementation's physical reservation range, not a virtual-pointer tag. -/
+structure ExclusiveMonitor where
+  physicalStart : BitVec 64
+  bytes : Nat
+  deriving DecidableEq, Repr
+
+def ExclusiveMonitor.covers (m : ExclusiveMonitor) (address : BitVec 64) (bytes : Nat) : Bool :=
+  decide ((address - m.physicalStart).toNat + bytes <= m.bytes)
+
+/-- Per-attempt platform inputs. The binding supplies translation/reservation
+and implementation-defined monitor outcomes for each dynamic step; none of
+these choices is inferred from equality of virtual addresses. globalPass is the
+effective global-monitor outcome (true for a non-shareable access). commitPass
+is the final exclusive write outcome. abortOnFailure selects the permitted
+fault-first behavior even when the monitor check would fail. -/
+structure ExclusiveInputs where
+  physicalAddress : BitVec 64
+  reservation : ExclusiveMonitor
+  retainLocal : Bool
+  virtualPass : Bool
+  globalPass : Bool
+  commitPass : Bool
+  abortOnFailure : Bool
+  deriving DecidableEq, Repr
+
+inductive ExclusiveAction where
+  | reserve | attempt | clear
+  deriving DecidableEq, Repr
+
+/-- The access descriptor and captured native value for an exclusive attempt.
+A failed attempt is observed without inventing a memory write. -/
+structure ExclusiveAccess where
+  action : ExclusiveAction
+  address : BitVec 64
+  bytes : Nat
+  value : BitVec 64
+  acquire : Bool
+  release : Bool
+  success : Bool
+  deriving DecidableEq, Repr
+
+structure ExclusiveState where
+  monitor : Option ExclusiveMonitor := none
+  /-- No implicit success profile: exclusive loads/stores need an explicit binding. -/
+  inputs : Option ExclusiveInputs := none
+  accesses : List ExclusiveAccess := []
+  deriving DecidableEq, Repr
+
 @[ext]
 structure ArmState where
   /-- General-purpose registers: register 31 is the stack pointer. -/
@@ -180,6 +228,7 @@ structure ArmState where
   program            : Program
   /-- Successful atomic accesses, in execution order. Ordinary steps preserve it. -/
   atomicAccesses : List AtomicAccess := []
+  exclusive : ExclusiveState := {}
   /--
   The error field is an artifact of this model; it is set to a
   non-None value when some irrecoverable error is encountered
@@ -205,6 +254,13 @@ def read_atomic_accesses (s : ArmState) : List AtomicAccess := s.atomicAccesses
 @[state_simp_rules]
 def record_atomic_access (access : AtomicAccess) (s : ArmState) : ArmState :=
   { s with atomicAccesses := s.atomicAccesses ++ [access] }
+
+@[state_simp_rules]
+def read_exclusive_state (s : ArmState) : ExclusiveState := s.exclusive
+
+@[state_simp_rules]
+def write_exclusive_state (value : ExclusiveState) (s : ArmState) : ArmState :=
+  { s with exclusive := value }
 
 ---- Basic State Accessors and Updaters (except memory) ----
 
@@ -1315,6 +1371,7 @@ theorem state_eq_iff_components_eq {s1 s2 : ArmState} :
   ((∀ (f : StateField), r f s1 = r f s2) ∧
    (s1.program = s2.program) ∧
    (read_atomic_accesses s1 = read_atomic_accesses s2) ∧
+   (read_exclusive_state s1 = read_exclusive_state s2) ∧
    (∀ (n : Nat) (addr : BitVec 64),
       read_mem_bytes n addr s1 = read_mem_bytes n addr s2)) := by
   constructor
@@ -1324,7 +1381,7 @@ theorem state_eq_iff_components_eq {s1 s2 : ArmState} :
     simp only [implies_true, and_self]
   case mpr =>
     intro h
-    obtain ⟨h_fields, h_program, h_atomic, h_mem⟩ := h
+    obtain ⟨h_fields, h_program, h_atomic, h_exclusive, h_mem⟩ := h
     apply ArmState.ext
     case gpr => rwa [reads_equal_implies_gpr_equal]
     case sfp => rwa [reads_equal_implies_sfp_equal]
@@ -1333,6 +1390,7 @@ theorem state_eq_iff_components_eq {s1 s2 : ArmState} :
     case error => rwa [reads_equal_implies_error_equal]
     case program => assumption
     case atomicAccesses => exact h_atomic
+    case exclusive => exact h_exclusive
     case mem => rwa [read_mem_bytes_equal_implies_mem_equal]
   done
 

@@ -66,7 +66,19 @@ instance : ToString Hints_cls where toString a := toString (repr a)
 def Hints_cls.toBitVec32 (x : Hints_cls) : BitVec 32 :=
   x._fixed1 ++ x.CRm ++ x.op2 ++ x._fixed2
 
+structure Clear_exclusive_cls where
+  _fixed1 : BitVec 20 := 0xd5033#20
+  imm4 : BitVec 4
+  _fixed2 : BitVec 8 := 0x5f#8
+deriving DecidableEq, Repr
+
+instance : ToString Clear_exclusive_cls where toString a := toString (repr a)
+
+def Clear_exclusive_cls.toBitVec32 (x : Clear_exclusive_cls) : BitVec 32 :=
+  x._fixed1 ++ x.imm4 ++ x._fixed2
+
 inductive BranchInst where
+  | Clear_exclusive : Clear_exclusive_cls → BranchInst
   | Compare_branch :
     Compare_branch_cls → BranchInst
   | Uncond_branch_imm :

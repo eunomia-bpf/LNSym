@@ -23,6 +23,8 @@ def exec_inst (ai : ArmInst) (s : ArmState) : ArmState :=
   | DPI (DataProcImmInst.Move_wide_imm i) =>
     DPI.exec_move_wide_imm i s
 
+  | BR (BranchInst.Clear_exclusive i) =>
+    BR.exec_clear_exclusive i s
   | BR (BranchInst.Compare_branch i) =>
     BR.exec_compare_branch i s
   | BR (BranchInst.Uncond_branch_imm i) =>
@@ -88,6 +90,8 @@ def exec_inst (ai : ArmInst) (s : ArmState) : ArmState :=
   | DPSFP (DataProcSFPInst.Conversion_between_FP_and_Int i) =>
     DPSFP.exec_conversion_between_FP_and_Int i s
 
+  | LDST (LDSTInst.Exclusive_single i) =>
+    LDST.exec_exclusive_single i s
   | LDST (LDSTInst.Atomic_memory_op i) =>
     LDST.exec_atomic_memory_op i s
   | LDST (LDSTInst.Reg_imm_pre_indexed i) =>

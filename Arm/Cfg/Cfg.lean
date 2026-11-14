@@ -231,8 +231,8 @@ protected def addArmInstToCfg (pc : BitVec 64) (raw_inst : BitVec 32)
             (fun state => BR.Cond_branch_imm_inst.condition_holds inst state)
         (false, BrOrg pc condition_holds,
           [Seq default_to_pc, BrTgt branch_taken_pc condition_holds])
-      -- Currently only consider NOP
-      | Hints _ =>
+      -- NOP and CLREX both fall through without modifying GPRs.
+      | Hints _ | Clear_exclusive _ =>
         (false, Seq pc, [Seq default_to_pc])
    do let maybe_modified_regs ← mayModifiedRegs raw_inst
    let new_cfg ← addEntry pc_inst to_insts maybe_modified_regs cfg

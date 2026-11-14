@@ -86,6 +86,8 @@ def decode_branch (i : BitVec 32) : Option ArmInst :=
   open ArmInst in
   open BranchInst in
   match_bv i with
+  | [11010101000000110011, imm4:4, 01011111] =>
+    BR (Clear_exclusive {imm4})
   | [sf:1, 011010, op:1, imm19:19, Rt:5] =>
     BR (Compare_branch {sf, op, imm19, Rt})
   | [op:1, 00101, imm26:26] =>
@@ -230,6 +232,8 @@ def decode_ldst_inst (i : BitVec 32) : Option ArmInst :=
   open ArmInst in
   open LDSTInst in
   match_bv i with
+  | [size:2, 0010000, L:1, 0, Rs:5, o0:1, 11111, Rn:5, Rt:5] =>
+    LDST (Exclusive_single {size, L, Rs, o0, Rn, Rt})
   | [size:2, 111000, A:1, R:1, 1, Rs:5, o3:1, opc:3, 00, Rn:5, Rt:5] =>
     LDST (Atomic_memory_op {size, A, R, Rs, o3, opc, Rn, Rt})
   | [size:2, 111, V:1, 00, opc:2, 0, imm9:9, 11, Rn:5, Rt:5] =>
@@ -289,6 +293,9 @@ def LDST.mayModifiedRegs (i : BitVec 32) : Except Format (List RegType) :=
       let (rpt, selem) := LDST.multiple_struct_rpt_selem opcode
       (List.range (rpt * selem)).map fun k => .SFP (Rt + BitVec.ofNat 5 k)
     match arm_inst with
+    | LDST (Exclusive_single x) =>
+      let dst := if x.L = 1#1 then x.Rt else x.Rs
+      if dst = 31#5 then .ok [] else .ok [.GPR dst]
     | LDST (Atomic_memory_op x) =>
       if x.Rt = 31#5 then .ok [] else .ok [.GPR x.Rt]
     | LDST (Reg_imm_pre_indexed x) | LDST (Reg_imm_post_indexed x) =>
