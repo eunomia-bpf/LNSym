@@ -7,7 +7,7 @@ Author(s): Shilpi Goel, Yan Peng
 -- Shared transfers for unsigned, unscaled, pre/post and register offsets.
 
 import Arm.Decode
-import Arm.Insts.Common
+import Arm.Memory.Access
 
 ----------------------------------------------------------------------
 
@@ -33,34 +33,28 @@ def reg_imm_operation (inst_str : String) (op : BitVec 1)
   (wback : Bool) (postindex : Bool) (SIMD? : Bool)
   (datasize : Nat) (regsize : Option Nat) (Rn : BitVec 5)
   (Rt : BitVec 5) (offset : BitVec 64) (s : ArmState)
-  (H : 8 ∣ datasize) (signed : Bool := false) : ArmState :=
+  (H : 8 ∣ datasize) (signed : Bool := false)
+  (memory : MemoryMode := .total) : ArmState :=
   let address := read_gpr 64 Rn s
-  if Rn = 31#5 ∧ ¬(CheckSPAlignment s) then
-      write_err (StateError.Fault s!"[Inst: {inst_str}] SP {address} is not aligned!") s
-      -- Note: we do not need to model the ASL function
-      -- "CreateAccDescGPR" here, given the simplicity of our memory
-      -- model
+  if Rn = 31#5 ∧ ¬(memory.spAligned s) then
+    memory.fault (.spAlignment address) s!"[Inst: {inst_str}] SP {address} is not aligned!" s
   else
     let address := if postindex then address else address + offset
-    have h : datasize / 8 * 8 = datasize := by
-      exact Nat.div_mul_cancel H
-    let s :=
-      match op with
-      | 0#1 => -- STORE
-        let data := ldst_read SIMD? datasize Rt s
-        write_mem_bytes (datasize / 8) address (BitVec.cast h.symm data) s
-      | _ => -- LOAD
-        let data := read_mem_bytes (datasize / 8) address s
-        if SIMD? then write_sfp datasize Rt (BitVec.cast h data) s
-        else
-          let value := if signed then signExtend regsize.get! data
-                       else zeroExtend regsize.get! data
-          write_gpr_zr regsize.get! Rt value s
-    if wback then
-      let address := if postindex then address + offset else address
-      write_gpr 64 Rn address s
-    else
-      s
+    have h : datasize / 8 * 8 = datasize := Nat.div_mul_cancel H
+    MemoryMode.finish do
+      let s ← if op = 0#1 then
+          memory.write (datasize / 8) address
+            (BitVec.cast h.symm (ldst_read SIMD? datasize Rt s)) s
+        else do
+          let (data, s) ← memory.read (datasize / 8) address s
+          if SIMD? then pure (write_sfp datasize Rt (BitVec.cast h data) s)
+          else
+            let value := if signed then signExtend regsize.get! data
+                         else zeroExtend regsize.get! data
+            pure (write_gpr_zr regsize.get! Rt value s)
+      pure (if wback then
+        write_gpr 64 Rn (if postindex then address + offset else address) s
+        else s)
 
 @[state_simp_rules]
 def reg_imm_constrain_unpredictable (wback : Bool) (SIMD? : Bool) (Rn : BitVec 5)
@@ -82,7 +76,8 @@ def supported_reg_imm (size : BitVec 2) (opc : BitVec 2) (SIMD? : Bool) : Bool :
 
 @[state_simp_rules]
 def exec_reg_imm_common_offset
-  (inst : Reg_imm_cls) (inst_str : String) (offset : BitVec 64) (s : ArmState) : ArmState :=
+  (inst : Reg_imm_cls) (inst_str : String) (offset : BitVec 64) (s : ArmState)
+  (memory : MemoryMode := .total) : ArmState :=
   let scale :=
     if inst.SIMD? then ((lsb inst.opc 1) ++ inst.size).toNat
     else inst.size.toNat
@@ -107,21 +102,23 @@ def exec_reg_imm_common_offset
     let s' := reg_imm_operation inst_str
               (if regIsLoad inst.SIMD? inst.opc then 1#1 else 0#1) inst.wback inst.postindex
               inst.SIMD? datasize regsize inst.Rn inst.Rt offset s H
-              (!inst.SIMD? && getLsbD inst.opc 1)
+              (!inst.SIMD? && getLsbD inst.opc 1) memory
     if read_err s' = .None then write_pc (read_pc s + 4#64) s' else s'
 
 @[state_simp_rules]
 def exec_reg_imm_common
-  (inst : Reg_imm_cls) (inst_str : String) (s : ArmState) : ArmState :=
+  (inst : Reg_imm_cls) (inst_str : String) (s : ArmState)
+  (memory : MemoryMode := .total) : ArmState :=
   let scale := if inst.SIMD? then ((lsb inst.opc 1) ++ inst.size).toNat else inst.size.toNat
   let offset := match inst.imm with
     | Sum.inl imm12 => zeroExtend 64 imm12 <<< scale
     | Sum.inr imm9 => signExtend 64 imm9
-  exec_reg_imm_common_offset inst inst_str offset s
+  exec_reg_imm_common_offset inst inst_str offset s memory
 
 @[state_simp_rules]
 def exec_reg_imm_unsigned_offset
-  (inst : Reg_unsigned_imm_cls) (s : ArmState) : ArmState :=
+  (inst : Reg_unsigned_imm_cls) (s : ArmState)
+  (memory : MemoryMode := .total) : ArmState :=
   let extracted_inst : Reg_imm_cls :=
     { size      := inst.size,
       opc       := inst.opc,
@@ -131,11 +128,12 @@ def exec_reg_imm_unsigned_offset
       wback     := false,
       postindex := false,
       imm       := Sum.inl inst.imm12 }
-  exec_reg_imm_common extracted_inst s!"{inst}" s
+  exec_reg_imm_common extracted_inst s!"{inst}" s memory
 
 @[state_simp_rules]
 def exec_reg_imm_post_indexed
-  (inst : Reg_imm_post_indexed_cls) (s : ArmState) : ArmState :=
+  (inst : Reg_imm_post_indexed_cls) (s : ArmState)
+  (memory : MemoryMode := .total) : ArmState :=
   let extracted_inst : Reg_imm_cls :=
     { size      := inst.size,
       opc       := inst.opc,
@@ -145,20 +143,22 @@ def exec_reg_imm_post_indexed
       wback     := true,
       postindex := true,
       imm       := Sum.inr inst.imm9 }
-  exec_reg_imm_common extracted_inst s!"{inst}" s
+  exec_reg_imm_common extracted_inst s!"{inst}" s memory
 
 @[state_simp_rules]
 def exec_reg_imm_pre_indexed
-  (inst : Reg_imm_pre_indexed_cls) (s : ArmState) : ArmState :=
+  (inst : Reg_imm_pre_indexed_cls) (s : ArmState)
+  (memory : MemoryMode := .total) : ArmState :=
   let decoded : Reg_imm_cls :=
     { size := inst.size, opc := inst.opc, Rn := inst.Rn, Rt := inst.Rt,
       SIMD? := inst.V = 1#1, wback := true, postindex := false,
       imm := Sum.inr inst.imm9 }
-  exec_reg_imm_common decoded s!"{inst}" s
+  exec_reg_imm_common decoded s!"{inst}" s memory
 
 @[state_simp_rules]
 def exec_reg_register_offset
-  (inst : Reg_register_offset_cls) (s : ArmState) : ArmState :=
+  (inst : Reg_register_offset_cls) (s : ArmState)
+  (memory : MemoryMode := .total) : ArmState :=
   if !(getLsbD inst.option 1) then
     write_err (StateError.Illegal s!"Illegal {inst} encountered!") s
   else
@@ -171,6 +171,6 @@ def exec_reg_register_offset
       { size := inst.size, opc := inst.opc, Rn := inst.Rn, Rt := inst.Rt,
         SIMD? := inst.V = 1#1, wback := false, postindex := false,
         imm := Sum.inl 0#12 }
-    exec_reg_imm_common_offset decoded s!"{inst}" offset s
+    exec_reg_imm_common_offset decoded s!"{inst}" offset s memory
 
 end LDST

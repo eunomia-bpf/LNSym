@@ -34,3 +34,4 @@ import Tests.ExtendedArithmeticTest
 import Tests.AtomicMemoryTest
 import Tests.ExclusiveMemoryTest
 import Tests.PairMemoryTest
+import Tests.CheckedMemoryTest

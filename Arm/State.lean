@@ -160,6 +160,33 @@ structure AtomicAccess where
   release : Bool
   deriving DecidableEq, Repr
 
+/-- Memory attributes supplied by the platform binding. Uninitialized bytes
+retain their actual memory values; initialized is observational ghost state. -/
+structure MemoryProfile where
+  readable : Store (BitVec 64) Bool := fun _ => true
+  writable : Store (BitVec 64) Bool := fun _ => true
+  initialized : Store (BitVec 64) Bool := fun _ => false
+  spAlignmentCheck : Bool := true
+  /-- Effective pair single-access profile (FEAT_LSE2). -/
+  pairSingleAccess : Bool := false
+  deriving Repr
+
+inductive MemoryAccessKind where
+  | read | write
+  deriving DecidableEq, Repr
+
+inductive MemoryAccessFault where
+  | read (address : BitVec 64) (bytes : Nat)
+  | write (address : BitVec 64) (bytes : Nat)
+  | spAlignment (address : BitVec 64)
+  deriving DecidableEq, Repr
+
+inductive MemoryAccessEvent where
+  | memory (kind : MemoryAccessKind) (address : BitVec 64)
+      (value : List (BitVec 8)) (initialized : Bool)
+  | fault (reason : MemoryAccessFault)
+  deriving DecidableEq, Repr
+
 /-- The implementation's physical reservation range, not a virtual-pointer tag. -/
 structure ExclusiveMonitor where
   physicalStart : BitVec 64
@@ -229,6 +256,8 @@ structure ArmState where
   /-- Successful atomic accesses, in execution order. Ordinary steps preserve it. -/
   atomicAccesses : List AtomicAccess := []
   exclusive : ExclusiveState := {}
+  memoryProfile : Option MemoryProfile := none
+  memoryAccesses : List MemoryAccessEvent := []
   /--
   The error field is an artifact of this model; it is set to a
   non-None value when some irrecoverable error is encountered
@@ -261,6 +290,20 @@ def read_exclusive_state (s : ArmState) : ExclusiveState := s.exclusive
 @[state_simp_rules]
 def write_exclusive_state (value : ExclusiveState) (s : ArmState) : ArmState :=
   { s with exclusive := value }
+
+@[state_simp_rules]
+def read_memory_profile (s : ArmState) : Option MemoryProfile := s.memoryProfile
+
+@[state_simp_rules]
+def write_memory_profile (profile : Option MemoryProfile) (s : ArmState) : ArmState :=
+  { s with memoryProfile := profile }
+
+@[state_simp_rules]
+def read_memory_accesses (s : ArmState) : List MemoryAccessEvent := s.memoryAccesses
+
+@[state_simp_rules]
+def record_memory_access (event : MemoryAccessEvent) (s : ArmState) : ArmState :=
+  { s with memoryAccesses := s.memoryAccesses ++ [event] }
 
 ---- Basic State Accessors and Updaters (except memory) ----
 
@@ -1372,6 +1415,8 @@ theorem state_eq_iff_components_eq {s1 s2 : ArmState} :
    (s1.program = s2.program) ∧
    (read_atomic_accesses s1 = read_atomic_accesses s2) ∧
    (read_exclusive_state s1 = read_exclusive_state s2) ∧
+   (read_memory_profile s1 = read_memory_profile s2) ∧
+   (read_memory_accesses s1 = read_memory_accesses s2) ∧
    (∀ (n : Nat) (addr : BitVec 64),
       read_mem_bytes n addr s1 = read_mem_bytes n addr s2)) := by
   constructor
@@ -1381,7 +1426,7 @@ theorem state_eq_iff_components_eq {s1 s2 : ArmState} :
     simp only [implies_true, and_self]
   case mpr =>
     intro h
-    obtain ⟨h_fields, h_program, h_atomic, h_exclusive, h_mem⟩ := h
+    obtain ⟨h_fields, h_program, h_atomic, h_exclusive, h_profile, h_accesses, h_mem⟩ := h
     apply ArmState.ext
     case gpr => rwa [reads_equal_implies_gpr_equal]
     case sfp => rwa [reads_equal_implies_sfp_equal]
@@ -1391,6 +1436,8 @@ theorem state_eq_iff_components_eq {s1 s2 : ArmState} :
     case program => assumption
     case atomicAccesses => exact h_atomic
     case exclusive => exact h_exclusive
+    case memoryProfile => exact h_profile
+    case memoryAccesses => exact h_accesses
     case mem => rwa [read_mem_bytes_equal_implies_mem_equal]
   done
 

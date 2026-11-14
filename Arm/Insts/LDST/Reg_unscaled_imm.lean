@@ -43,14 +43,15 @@ def exec_ldstur
 
 @[state_simp_rules]
 def exec_reg_unscaled_imm
-  (inst : Reg_unscaled_imm_cls) (s : ArmState) : ArmState :=
-  if inst.VR = 0b1#1 then
+  (inst : Reg_unscaled_imm_cls) (s : ArmState)
+  (memory : MemoryMode := .total) : ArmState :=
+  if inst.VR = 0b1#1 && memory = .total then
     exec_ldstur inst s
   else
     let decoded : Reg_imm_cls :=
       { size := inst.size, opc := inst.opc, Rn := inst.Rn, Rt := inst.Rt,
-        SIMD? := false, wback := false, postindex := false,
+        SIMD? := inst.VR = 1#1, wback := false, postindex := false,
         imm := Sum.inr inst.imm9 }
-    exec_reg_imm_common decoded s!"{inst}" s
+    exec_reg_imm_common decoded s!"{inst}" s memory
 
 end LDST
