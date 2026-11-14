@@ -26,11 +26,11 @@ def fmov_general_aux (intsize : Nat) (fltsize : Nat) (op : FPConvOp)
     let fltval := Vpart_read inst.Rn part fltsize s
     let intval := zeroExtend intsize fltval
     -- State Update
-    let s := write_gpr intsize inst.Rd intval s
+    let s := write_gpr_zr intsize inst.Rd intval s
     let s := write_pc ((read_pc s) + 4#64) s
     s
   | FPConvOp.FPConvOp_MOV_ItoF =>
-    let intval := read_gpr intsize inst.Rn s
+    let intval := read_gpr_zr intsize inst.Rn s
     let fltval := extractLsb' 0 fltsize intval
     -- State Update
     let s := Vpart_write inst.Rd part fltsize fltval s

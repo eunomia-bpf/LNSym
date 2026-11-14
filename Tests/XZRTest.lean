@@ -60,4 +60,10 @@ example : r (.GPR 0#5) (after 0xf240fbe0#32) = 0#64 := by native_decide  -- ands
 -- Destination 31 of non-flag-setting AND/ORR/EOR immediate is still SP.
 example : r (.GPR 31#5) (after 0xb240001f#32) = 1#64 := by native_decide  -- orr sp, x0, #1
 
+-- (5) FMOV general transfers use ZR for GPR field31 in both directions.
+example : read_sfp 128 0#5 (after 0x9e6703e0#32) = 0#128 := by native_decide -- fmov d0, xzr
+example : read_sfp 128 0#5 (after 0x1e2703e0#32) = 0#128 := by native_decide -- fmov s0, wzr
+example : r (.GPR 31#5) (after 0x9e66001f#32) = 0x1000#64 := by native_decide -- fmov xzr, d0
+example : r (.GPR 31#5) (after 0x1e26001f#32) = 0x1000#64 := by native_decide -- fmov wzr, s0
+
 end XZRTest
