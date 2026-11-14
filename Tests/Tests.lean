@@ -31,3 +31,4 @@ import Tests.ExtractCompareTest
 import Tests.SingleRegMemoryTest
 import Tests.VectorReductionTest
 import Tests.ExtendedArithmeticTest
+import Tests.AtomicMemoryTest

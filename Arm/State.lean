@@ -140,6 +140,26 @@ We use an abbreivation to write definitions that are about memory as `*`.
 -/
 abbrev Memory := Store (BitVec 64) (BitVec 8)
 
+/-- LSE operations currently modeled by the atomic memory instruction class. -/
+inductive AtomicOperation where
+  | add | clear | set
+  deriving DecidableEq, Repr
+
+/-- A successful atomic access is one indivisible read/modify/write action.
+Keep the ordering descriptor with the captured old/new values rather than
+silently treating acquire/release encodings as relaxed accesses. The current
+memory model is flat little-endian memory; this is an architectural observation,
+not a concurrent-system implementation or an access-permission model. -/
+structure AtomicAccess where
+  operation : AtomicOperation
+  address : BitVec 64
+  bytes : Nat
+  oldValue : BitVec 64
+  newValue : BitVec 64
+  acquire : Bool
+  release : Bool
+  deriving DecidableEq, Repr
+
 @[ext]
 structure ArmState where
   /-- General-purpose registers: register 31 is the stack pointer. -/
@@ -158,6 +178,8 @@ structure ArmState where
   the program is always disjoint from the rest of the memory.
   -/
   program            : Program
+  /-- Successful atomic accesses, in execution order. Ordinary steps preserve it. -/
+  atomicAccesses : List AtomicAccess := []
   /--
   The error field is an artifact of this model; it is set to a
   non-None value when some irrecoverable error is encountered
@@ -176,6 +198,13 @@ def ArmState.default : ArmState := {
     program := [],
     error := StateError.None
   }
+
+@[state_simp_rules]
+def read_atomic_accesses (s : ArmState) : List AtomicAccess := s.atomicAccesses
+
+@[state_simp_rules]
+def record_atomic_access (access : AtomicAccess) (s : ArmState) : ArmState :=
+  { s with atomicAccesses := s.atomicAccesses ++ [access] }
 
 ---- Basic State Accessors and Updaters (except memory) ----
 
@@ -1285,6 +1314,7 @@ theorem state_eq_iff_components_eq {s1 s2 : ArmState} :
   (s1 = s2) ↔
   ((∀ (f : StateField), r f s1 = r f s2) ∧
    (s1.program = s2.program) ∧
+   (read_atomic_accesses s1 = read_atomic_accesses s2) ∧
    (∀ (n : Nat) (addr : BitVec 64),
       read_mem_bytes n addr s1 = read_mem_bytes n addr s2)) := by
   constructor
@@ -1294,7 +1324,7 @@ theorem state_eq_iff_components_eq {s1 s2 : ArmState} :
     simp only [implies_true, and_self]
   case mpr =>
     intro h
-    obtain ⟨h_fields, h_program, h_mem⟩ := h
+    obtain ⟨h_fields, h_program, h_atomic, h_mem⟩ := h
     apply ArmState.ext
     case gpr => rwa [reads_equal_implies_gpr_equal]
     case sfp => rwa [reads_equal_implies_sfp_equal]
@@ -1302,6 +1332,7 @@ theorem state_eq_iff_components_eq {s1 s2 : ArmState} :
     case pstate => rwa [reads_equal_implies_pstate_equal]
     case error => rwa [reads_equal_implies_error_equal]
     case program => assumption
+    case atomicAccesses => exact h_atomic
     case mem => rwa [read_mem_bytes_equal_implies_mem_equal]
   done
 

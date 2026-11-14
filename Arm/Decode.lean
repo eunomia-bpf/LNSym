@@ -230,6 +230,8 @@ def decode_ldst_inst (i : BitVec 32) : Option ArmInst :=
   open ArmInst in
   open LDSTInst in
   match_bv i with
+  | [size:2, 111000, A:1, R:1, 1, Rs:5, o3:1, opc:3, 00, Rn:5, Rt:5] =>
+    LDST (Atomic_memory_op {size, A, R, Rs, o3, opc, Rn, Rt})
   | [size:2, 111, V:1, 00, opc:2, 0, imm9:9, 11, Rn:5, Rt:5] =>
     LDST (Reg_imm_pre_indexed {size, V, opc, imm9, Rn, Rt})
   | [size:2, 111, V:1, 00, opc:2, 1, Rm:5, option:3, S:1, 10, Rn:5, Rt:5] =>
@@ -287,6 +289,8 @@ def LDST.mayModifiedRegs (i : BitVec 32) : Except Format (List RegType) :=
       let (rpt, selem) := LDST.multiple_struct_rpt_selem opcode
       (List.range (rpt * selem)).map fun k => .SFP (Rt + BitVec.ofNat 5 k)
     match arm_inst with
+    | LDST (Atomic_memory_op x) =>
+      if x.Rt = 31#5 then .ok [] else .ok [.GPR x.Rt]
     | LDST (Reg_imm_pre_indexed x) | LDST (Reg_imm_post_indexed x) =>
       -- Writeback: `x.Rn` is updated for both loads and stores.
       if regIsLoad (x.V == 1#1) x.opc then .ok [dataReg x.V x.Rt, .GPR x.Rn] -- Load

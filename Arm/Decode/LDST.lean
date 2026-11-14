@@ -159,7 +159,29 @@ deriving DecidableEq, Repr
 
 instance : ToString Reg_register_offset_cls where toString a := toString (repr a)
 
+/-- Load/store atomic memory operations (FEAT_LSE). Other opcodes in this
+encoding group are decoded but refused until their execution is implemented. -/
+structure Atomic_memory_op_cls where
+  size    : BitVec 2                       -- [31:30]
+  _fixed1 : BitVec 6 := 0b111000#6         -- [29:24]
+  A       : BitVec 1                       -- [23:23]
+  R       : BitVec 1                       -- [22:22]
+  _fixed2 : BitVec 1 := 1#1                -- [21:21]
+  Rs      : BitVec 5                       -- [20:16]
+  o3      : BitVec 1                       -- [15:15]
+  opc     : BitVec 3                       -- [14:12]
+  _fixed3 : BitVec 2 := 0#2                -- [11:10]
+  Rn      : BitVec 5                       -- [9:5]
+  Rt      : BitVec 5                       -- [4:0]
+deriving DecidableEq, Repr
+
+instance : ToString Atomic_memory_op_cls where toString a := toString (repr a)
+
+def Atomic_memory_op_cls.toBitVec32 (x : Atomic_memory_op_cls) : BitVec 32 :=
+  x.size ++ x._fixed1 ++ x.A ++ x.R ++ x._fixed2 ++ x.Rs ++ x.o3 ++ x.opc ++ x._fixed3 ++ x.Rn ++ x.Rt
+
 inductive LDSTInst where
+  | Atomic_memory_op : Atomic_memory_op_cls → LDSTInst
   | Reg_imm_pre_indexed : Reg_imm_pre_indexed_cls → LDSTInst
   | Reg_register_offset : Reg_register_offset_cls → LDSTInst
   | Reg_imm_post_indexed :
